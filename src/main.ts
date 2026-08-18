@@ -14,6 +14,8 @@ import { fastifyPlugin } from 'inngest/fastify';
 import { inngest } from './common/inngest/client';
 import { functions } from './common/inngest/index';
 import * as Sentry from '@sentry/nestjs';
+import { CollaborationService } from './Modules/collaboration/collaboration.service';
+import { Server as HttpServer } from 'node:http';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
@@ -38,6 +40,11 @@ async function bootstrap() {
   });
 
   const { serverInfo } = await AppBootstrap.bootstrap(app);
+
+  app.enableShutdownHooks();
+
+  const collaborationService = app.get(CollaborationService);
+  collaborationService.attach(app.getHttpServer() as HttpServer);
 
   // ===============================
   // Register Global Interceptors

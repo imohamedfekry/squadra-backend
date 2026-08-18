@@ -18,10 +18,17 @@ import {
 import { FILE_EVENTES } from '../realtime/events/files.events';
 import * as v from 'valibot';
 import { FileStandard } from './dto/file.dto';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
+import * as Y from 'yjs';
 import { StorageService } from '../storage/storage.service';
+import { CollaborationService } from '../collaboration/collaboration.service';
 import { File } from 'src/common/database/schema';
+import {
+  COLLABORATION_TEXT_FIELD,
+  YJS_CONTENT_TYPE,
+  buildDocumentName,
+} from '../collaboration/collaboration.constants';
+import { getMimeType } from 'src/common/utils/mime';
 @Injectable()
 export class FileService {
   constructor(
@@ -29,7 +36,7 @@ export class FileService {
     private readonly projectRepository: ProjectRepository,
     private readonly realtimeEmitService: RealtimeEmitService,
     private readonly storageService: StorageService,
-    // private readonly S3client: S3Client,
+    private readonly collaborationService: CollaborationService,
     private readonly config: ConfigService,
   ) { }
   async getRootFiles(projectId: bigint, req: AuthenticatedRequest) {
@@ -75,11 +82,25 @@ export class FileService {
         },
       });
     }
-    const { content, contentType } = await this.storageService.getFileContent(storageKey);
+    const { buffer, contentType } = await this.storageService.getBuffer(storageKey);
+
+    if (contentType === YJS_CONTENT_TYPE) {
+      const document = new Y.Doc();
+      Y.applyUpdate(document, buffer);
+      const content = document.getText(COLLABORATION_TEXT_FIELD).toString();
+
+      return success(RESPONSE_MESSAGES.FILE.FETCH_SUCCESS, {
+        file: {
+          content,
+          contentType: getMimeType(file.name),
+        },
+      });
+    }
+
     return success(RESPONSE_MESSAGES.FILE.FETCH_SUCCESS, {
       file: {
-        content,
-        contentType,
+        content: buffer.toString('utf-8'),
+        contentType: contentType || 'text/plain; charset=utf-8',
       },
     });
   }
@@ -251,14 +272,9 @@ export class FileService {
       throw new NotFoundException(fail(RESPONSE_MESSAGES.FILE.NOT_FOUND));
     }
 
-    await this.storageService.updateFileContent(file.storageKey, body.content);
-
-    this.realtimeEmitService.toProject(
-      projectId.toString(),
-      FILE_EVENTES.CONTENT_UPDATED,
-      {
-        fileId: file.id,
-      },
+    await this.collaborationService.applyFullText(
+      buildDocumentName(projectId, file.id),
+      body.content,
     );
 
     return success(RESPONSE_MESSAGES.FILE.UPDATED);

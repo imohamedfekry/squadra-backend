@@ -8,6 +8,7 @@ import { projectModule } from './Modules/project/project.module';
 import { RealtimeModule } from './Modules/realtime/realtime.module';
 import { FileModule } from './Modules/files/files.module';
 import { StorageModule } from './Modules/storage/storage.module';
+import { CollaborationModule } from './Modules/collaboration/collaboration.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { StorageModule } from './Modules/storage/storage.module';
     RealtimeModule,
     FileModule,
     StorageModule,
+    CollaborationModule,
   ],
 })
 export class AppModule {}

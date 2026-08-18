@@ -89,17 +89,9 @@ export class StorageService {
       }),
     );
   }
-  async updateFileContent(key: string, content: string) {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: content,
-        ContentType: 'text/plain; charset=utf-8',
-      }),
-    );
-  }
-  async getFileContent(key: string): Promise<{ content: string; contentType: string }> {
+  async getBuffer(
+    key: string,
+  ): Promise<{ buffer: Buffer; contentType?: string }> {
     try {
       const object = await this.client.send(
         new GetObjectCommand({
@@ -109,16 +101,42 @@ export class StorageService {
       );
 
       if (!object.Body) {
-        return { content: "", contentType: "text/plain; charset=utf-8" };
+        return { buffer: Buffer.alloc(0), contentType: object.ContentType };
       }
 
-      const content = await object.Body.transformToString('utf-8');
-      return { content, contentType: object.ContentType || 'text/plain; charset=utf-8' };
+      return {
+        buffer: Buffer.from(await object.Body.transformToByteArray()),
+        contentType: object.ContentType,
+      };
     } catch (error: any) {
       if (error.name === 'NoSuchKey' || error.Code === 'NoSuchKey') {
-        return { content: "", contentType: "text/plain; charset=utf-8" };
+        return { buffer: Buffer.alloc(0) };
       }
       throw error;
     }
+  }
+
+  async putBuffer(key: string, buffer: Buffer, contentType?: string) {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  async updateFileContent(key: string, content: string) {
+    await this.putBuffer(key, Buffer.from(content, 'utf-8'), 'text/plain; charset=utf-8');
+  }
+
+  async getFileContent(key: string): Promise<{ content: string; contentType: string }> {
+    const { buffer, contentType } = await this.getBuffer(key);
+
+    return {
+      content: buffer.toString('utf-8'),
+      contentType: contentType || 'text/plain; charset=utf-8',
+    };
   }
 }
