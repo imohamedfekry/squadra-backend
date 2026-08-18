@@ -22,6 +22,7 @@ export interface CollaborationContext {
   userId: bigint;
   projectId: bigint;
   fileId: bigint;
+  storageKey?: string | null;
 }
 
 @Injectable()
@@ -81,6 +82,7 @@ export class CollaborationService implements OnModuleDestroy {
           userId: user.id,
           projectId: parsed.projectId,
           fileId: parsed.fileId,
+          storageKey: file.storageKey,
         };
       },
       onLoadDocument: async ({ document, context }) => {
@@ -88,15 +90,16 @@ export class CollaborationService implements OnModuleDestroy {
           return document;
         }
 
-        const file = await this.fileRepository.getFile(context.fileId);
+        const storageKey =
+          context.storageKey ??
+          (await this.fileRepository.getFile(context.fileId))?.storageKey;
 
-        if (!file || !file.storageKey) {
+        if (!storageKey) {
           return document;
         }
 
-        const { buffer, contentType } = await this.storageService.getBuffer(
-          file.storageKey,
-        );
+        const { buffer, contentType } =
+          await this.storageService.getBuffer(storageKey);
 
         if (buffer.length === 0) {
           return document;
@@ -108,7 +111,7 @@ export class CollaborationService implements OnModuleDestroy {
             return document;
           } catch (error) {
             this.logger.warn(
-              `Failed to decode collaborative state for file ${file.id}: ${error}`,
+              `Failed to decode collaborative state for file ${context.fileId}: ${error}`,
             );
           }
         }
@@ -125,22 +128,24 @@ export class CollaborationService implements OnModuleDestroy {
         const context =
           lastContext && (lastContext as CollaborationContext).fileId
             ? (lastContext as CollaborationContext)
-            : parseDocumentName(documentName);
+            : (parseDocumentName(documentName) as CollaborationContext | null);
 
         if (!context) {
           return;
         }
 
-        const file = await this.fileRepository.getFile(context.fileId);
+        const storageKey =
+          context.storageKey ??
+          (await this.fileRepository.getFile(context.fileId))?.storageKey;
 
-        if (!file || !file.storageKey) {
+        if (!storageKey) {
           return;
         }
 
         const update = Buffer.from(Y.encodeStateAsUpdate(document));
 
         await this.storageService.putBuffer(
-          file.storageKey,
+          storageKey,
           update,
           YJS_CONTENT_TYPE,
         );
